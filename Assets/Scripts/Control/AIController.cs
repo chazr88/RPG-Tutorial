@@ -4,6 +4,8 @@ using UnityEngine;
 using RPG.Combat;
 using RPG.Core;
 using RPG.Movement;
+using RPG.Attributes;
+using GameDevTV.Utils;
 using System;
 
 namespace RPG.Control
@@ -12,21 +14,29 @@ namespace RPG.Control
     {
         [SerializeField] float chaseDistance = 5f;
         [SerializeField] float suspicionTime = 5f;
+        [SerializeField] float aggroCooldownTime = 5f;
         [SerializeField] PatrolPath patrolPath;
+        //Distance they can be from waypoint before they are considered close enough.
         [SerializeField] float waypointTolerance = 1;
         [SerializeField] float waypointDwellTime = 3f;
+        [Range(0,1)]
+        //We are setting patrol speed at a fraction to make it easier to adjuster max speed and the fraction that 
+        //will be the patrol speed. 
+        [SerializeField] float patrolSpeedFraction = 0.2f;
+        [SerializeField] float shoutDistance = 5f;
 
         Fighter fighter; 
         Health health;
         GameObject player;
         Mover mover;  
 
-        Vector3 guardPosition;
+        LazyValue<Vector3> guardPosition;
         float timeSinceLastSawPlayer = Mathf.Infinity;
         float timeSinceArrivedAtWaypoint = Mathf.Infinity;
+        float timeSinceAggro = Mathf.Infinity;
         int currentWaypointIndex = 0;
-            
-        private void Start() 
+
+        private void Awake() 
         {
             fighter = GetComponent<Fighter>();
             health = GetComponent<Health>();
@@ -35,15 +45,25 @@ namespace RPG.Control
             //We will use this so the AI can recognize the player.
             player = GameObject.FindWithTag("Player");
 
-            guardPosition = transform.position;
+            guardPosition = new LazyValue<Vector3>(GetGuardPosition);
+        }
+
+        private Vector3 GetGuardPosition()
+        {
+            return transform.position;
+        }
+            
+        private void Start() 
+        {
+            guardPosition.ForceInit();
         }
 
         private void Update()
         {
             if (health.IsDead()) return;
 
-            if (InAttackRangeOfPlayer() && fighter.CanAttack(player))
-            {
+            if (IsAggro() && fighter.CanAttack(player))
+            { 
                 AttackBehaviour();
             }
             else if (timeSinceLastSawPlayer < suspicionTime)
@@ -60,15 +80,23 @@ namespace RPG.Control
             UpdateTimers();
         }
 
+        //This is called from the take damage unity event in the enemy prefab. 
+        //This resets the agro time which will trigger IsAggro in the update method.
+        public void Aggo()
+        {
+            timeSinceAggro = 0;
+        }
+
         private void UpdateTimers()
         {
             timeSinceLastSawPlayer += Time.deltaTime;
             timeSinceArrivedAtWaypoint += Time.deltaTime;
+            timeSinceAggro += Time.deltaTime;
         }
 
         private void PatrolBehaviour()
         {
-            Vector3 nextPosition = guardPosition;
+            Vector3 nextPosition = guardPosition.value;
 
             if(patrolPath != null)
             {
@@ -84,7 +112,8 @@ namespace RPG.Control
             //next WP. When he gets there it resets his TSAAW to 0 causing him to stand there until it is greater than WPDT
             if(timeSinceArrivedAtWaypoint > waypointDwellTime)
             {
-                mover.StartMoveAction(nextPosition);
+                //Here is where the patrol speed actually changes
+                mover.StartMoveAction(nextPosition, patrolSpeedFraction);
             }
 
         }
@@ -117,12 +146,27 @@ namespace RPG.Control
         {
             timeSinceLastSawPlayer = 0;
             fighter.Attack(player);
+
+            AggroNearbyEnemies();
         }
 
-        private bool InAttackRangeOfPlayer()
+        private void AggroNearbyEnemies()
+        {
+            RaycastHit[] hits = Physics.SphereCastAll(transform.position, shoutDistance, Vector3.up, 0);
+            foreach (RaycastHit hit in hits)
+            {
+                AIController ai = (hit.collider.GetComponent<AIController>());
+                if(ai == null) continue;
+
+                ai.Aggo();
+
+            }
+        }
+
+        private bool IsAggro()
         {
             float distanceToPlayer = Vector3.Distance(player.transform.position, transform.position);
-            return distanceToPlayer < chaseDistance;
+            return distanceToPlayer < chaseDistance || timeSinceAggro < aggroCooldownTime;
         }
 
         // //Called by unity
