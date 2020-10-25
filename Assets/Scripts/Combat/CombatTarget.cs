@@ -16,6 +16,7 @@ namespace RPG.Combat
 
         public bool HandleRaycast(PlayerController callingController)
         {
+            if (!enabled) return false;
             //This way our loop will then return the live enemy as the next target.
             if(!callingController.GetComponent<Fighter>().CanAttack(gameObject))
             {

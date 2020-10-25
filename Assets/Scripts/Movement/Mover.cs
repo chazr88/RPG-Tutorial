@@ -76,7 +76,7 @@ namespace RPG.Movement
         }
 
         //The purpose of this is to get the global vel and convert that to local vel. We do this because we do not care where our character is in the world,
-        //no matter where our character is, we will be able to tell it if its moving in a forward direction or not, and how how fast.
+        //no matter where our character is, we will be able to tell it if its moving in a forward direction or not, and how fast.
         private void updateAnimator()
         {
             //Gets global velocity from NavMeshAgent ans stores it in a variable with the type of vector3.
